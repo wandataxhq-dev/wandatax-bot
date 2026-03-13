@@ -1,50 +1,65 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
-  // 1. Handle GET (Meta's Verification Handshake)
+  // 1. Handle Meta's Verification (The Handshake)
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === process.env.VERIFY_TOKEN) {
+    if (mode && token === 'WandaVerify123') {
       return res.status(200).send(challenge);
+    } else {
+      return res.status(403).end();
     }
-    return res.status(403).json({ error: 'Verification failed' });
   }
 
-  // 2. Handle POST (Incoming WhatsApp Messages)
+  // 2. Handle Incoming WhatsApp Messages
   if (req.method === 'POST') {
     try {
       const body = req.body;
       const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-      if (message && message.type === 'text') {
-        const from = message.from; 
-        const text = message.text.body.trim();
+      if (message?.type === 'text') {
+        const senderPhone = message.from;
+        const text = message.text.body;
 
-        // If the message is just a number, log the weekly sale
-        if (!isNaN(text)) {
-          const amount = parseFloat(text);
-          
-          const { error } = await supabase
-            .from('weekly_summaries')
-            .insert([{ 
-              merchant_phone: from, 
-              total_turnover: amount 
-            }]);
+        // Extract numbers only (e.g., "35000" from "I made 35000")
+        const amount = parseFloat(text.replace(/[^0-9.]/g, ''));
 
-          if (error) console.error('Supabase Error:', error);
+        if (!isNaN(amount)) {
+          const tax = amount * 0.05; // 5% Calculation
+
+          // Save to Supabase
+          await supabase.from('weekly_summaries').insert([
+            { total_turnover: amount, tax_due: tax, merchant_phone: senderPhone, raw_text: text }
+          ]);
+
+          // Send WhatsApp Reply
+          await fetch(`https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: senderPhone,
+              type: "text",
+              text: { body: `✅ *WandaTax Record*\n\nTurnover: ${amount} CFA\nTax (5%): ${tax} CFA\n\nSaved to your dashboard!` }
+            }),
+          });
         }
       }
       return res.status(200).json({ status: 'ok' });
-    } catch (err) {
-      console.error('Webhook Error:', err);
-      return res.status(500).json({ error: 'Internal Server Error' });
+    } catch (error) {
+      console.error('Error:', error);
+      return res.status(500).json({ error: error.message });
     }
   }
 
-  return res.status(405).json({ error: 'Method Not Allowed' });
+  res.setHeader('Allow', ['GET', 'POST']);
+  res.status(405).end(`Method ${req.method} Not Allowed`);
 }
