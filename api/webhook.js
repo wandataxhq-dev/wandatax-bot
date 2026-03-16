@@ -1,8 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-// I have added .trim() to ensure NO spaces mess this up
-const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ3Bs3XStEZBgS0sJ8IDztIRp0xGyXcdOZBNihkJRNEdUe6CNoq7A3RxyFBWcJeF2z3xx6ZBqiBIco7kzCetf4EQ7w5S8wqTpaoxdjGhlxR6AgVYVJudTZBMz1ZBqdTJr77a0gFGI9nbh0NGHIfJAKpRSxEactZBQ9BZA6AOukt5LvQNPEl5EZCkQWmaFCcFE0ZAN8ZAQuA79ZB5a47ZAzVZAelnp2EEM1HXvn0brh8zpj5Xjd4Vw03f5qVo8Fpm4YZBGMHes8eGN45RuZBSsJeYQJYZD".trim();
-const PHONE_NUMBER_ID = "567083076495287".trim();
+const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ3Bs3XStEZBgS0sJ8IDztIRp0xGyXcdOZBNihkJRNEdUe6CNoq7A3RxyFBWcJeF2z3xx6ZBqiBIco7kzCetf4EQ7w5S8wqTpaoxdjGhlxR6AgVYVJudTZBMz1ZBqdTJr77a0gFGI9nbh0NGHIfJAKpRSxEactZBQ9BZA6AOukt5LvQNPEl5EZCkQWmaFCcFE0ZAN8ZAQuA79ZB5a47ZAzVZAelnp2EEM1HXvn0brh8zpj5Xjd4Vw03f5qVo8Fpm4YZBGMHes8eGN45RuZBSsJeYQJYZD";
+const PHONE_NUMBER_ID = "567083076495287";
 const VERIFY_TOKEN = "WandaVerify123";
 
 const supabaseUrl = 'https://itfwpvjscosvofgocvpx.supabase.co';
@@ -28,13 +27,12 @@ export default async function handler(req, res) {
 
       if (message?.type === 'text') {
         const customerNumber = message.from;
-        const text = message.text.body;
-        const amount = parseFloat(text.replace(/[^0-9.]/g, ''));
+        const amount = parseFloat(message.text.body.replace(/[^0-9.]/g, ''));
 
         if (!isNaN(amount)) {
           const tax = amount * 0.05;
 
-          // Save to Supabase
+          // 1. Supabase Logic (Already working)
           await supabase.from('weekly_summaries').insert([
             {
               phone_number: customerNumber,
@@ -44,35 +42,35 @@ export default async function handler(req, res) {
             }
           ]);
 
-          // Reply via WhatsApp - Using v21.0
-          const response = await fetch(
-            `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: "whatsapp",
-                to: customerNumber,
-                type: "text",
-                text: {
-                  body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA`
-                },
-              }),
-            }
-          );
+          // 2. WhatsApp Reply Logic - Explicitly formatted
+          const url = `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`;
+          
+          const whatsappRequest = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              recipient_type: "individual",
+              to: customerNumber,
+              type: "text",
+              text: {
+                body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA`
+              }
+            })
+          });
 
-          const result = await response.json();
-          console.log("WhatsApp API Response:", JSON.stringify(result, null, 2));
+          const result = await whatsappRequest.json();
+          console.log("Meta API Detail:", result);
         }
       }
-      return res.status(200).json({ status: 'ok' });
+      return res.status(200).send('EVENT_RECEIVED');
     } catch (error) {
-      console.error("Internal Error:", error);
-      return res.status(200).json({ status: 'ok' });
+      console.error("Critical Error:", error);
+      return res.status(200).send('EVENT_RECEIVED');
     }
   }
-  res.status(405).end();
+  return res.status(405).end();
 }
