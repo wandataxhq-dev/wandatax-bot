@@ -3,6 +3,10 @@
     {
       "path": "/api/weekly-push",
       "schedule": "0 18 * * 0"
+    },
+    {
+      "path": "/api/monday-nudge",
+      "schedule": "0 8 * * 1"
     }
   ]
 }
