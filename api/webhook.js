@@ -20,15 +20,14 @@ export default async function handler(req, res) {
     
     if (!message || message.type !== 'text') return res.status(200).send('OK');
 
-    const customerNumber = message.from; // e.g., "237670791352"
+    const customerNumber = message.from; 
     const amount = parseFloat(message.text.body.replace(/[^0-9.]/g, ''));
 
     if (!isNaN(amount)) {
       const tax = amount * 0.05;
-      const responseText = `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA`;
 
       try {
-        // 1. Save to Supabase
+        // 1. Supabase
         await supabase.from('weekly_summaries').insert([{
           phone_number: customerNumber,
           turnover: amount,
@@ -36,42 +35,26 @@ export default async function handler(req, res) {
           business_id: "WandaTax"
         }]);
 
-        // 2. Define the two formats
-        const formats = [
-          customerNumber,             // Format 1: "2376..."
-          `+${customerNumber}`        // Format 2: "+2376..."
-        ];
+        // 2. WhatsApp Reply - Trying the number exactly as it came in
+        const response = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: customerNumber,
+            type: "text",
+            text: { body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA` }
+          })
+        });
 
-        console.log(`Attempting replies for ${customerNumber}...`);
-
-        // 3. Try both formats until one works
-        for (const targetNumber of formats) {
-          const metaResponse = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: targetNumber,
-              type: "text",
-              text: { body: responseText }
-            })
-          });
-
-          const result = await metaResponse.json();
-          
-          if (result.error) {
-            console.log(`Format ${targetNumber} failed: ${result.error.message}`);
-          } else {
-            console.log(`Format ${targetNumber} SUCCEEDED!`);
-            break; // Stop if one format works
-          }
-        }
+        const result = await response.json();
+        console.log(`ATTEMPT FOR ${customerNumber}:`, JSON.stringify(result));
 
       } catch (err) {
-        console.error("System Error:", err.message);
+        console.error("CRITICAL SYSTEM ERROR:", err.message);
       }
     }
     return res.status(200).send('OK');
