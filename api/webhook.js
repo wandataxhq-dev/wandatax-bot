@@ -1,6 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Replace the first part with your actual URL string
+const supabase = createClient('https://your-project-id.supabase.co', process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
   // 1. Handle Meta's Verification (The Handshake)
