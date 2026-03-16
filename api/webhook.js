@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ3Bs3XStEZBgS0sJ8IDztIRp0xGyXcdOZBNihkJRNEdUe6CNoq7A3RxyFBWcJeF2z3xx6ZBqiBIco7kzCetf4EQ7w5S8wqTpaoxdjGhlxR6AgVYVJudTZBMz1ZBqdTJr77a0gFGI9nbh0NGHIfJAKpRSxEactZBQ9BZA6AOukt5LvQNPEl5EZCkQWmaFCcFE0ZAN8ZAQuA79ZB5a47ZAzVZAelnp2EEM1HXvn0brh8zpj5Xjd4Vw03f5qVo8Fpm4YZBGMHes8eGN45RuZBSsJeYQJYZD";
-const PHONE_NUMBER_ID = "567083076495287";
+const PHONE_NUMBER_ID = "1071558242701625";
 const VERIFY_TOKEN = "WandaVerify123";
 
 const supabaseUrl = 'https://itfwpvjscosvofgocvpx.supabase.co';
