@@ -1,58 +1,43 @@
 import { createClient } from '@supabase/supabase-js';
 
-// --- CREDENTIALS ---
-const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ3Bs3XStEZBgS0sJ8IDztIRp0xGyXcdOZBNihkJRNEdUe6CNoq7A3RxyFBWcJeF2z3xx6ZBqiBIco7kzCetf4EQ7w5S8wqTpaoxdjGhlxR6AgVYVJudTZBMz1ZBqdTJr77a0gFGI9nbh0NGHIfJAKpRSxEactZBQ9BZA6AOukt5LvQNPEl5EZCkQWmaFCcFE0ZAN8ZAQuA79ZB5a47ZAzVZAelnp2EEM1HXvn0brh8zpj5Xjd4Vw03f5qVo8Fpm4YZBGMHes8eGN45RuZBSsJeYQJYZD";
+// --- NEWEST TOKEN UPDATED ---
+const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ34vt7DJgIEITskdtg6FaXHSRKtCbvBIc1j1Yzda9tw8ZAmoTiP1OSZCI9lmcWdn0lOiMw0C5ez2pGN41DTezZCrGP08Ikia6UPRiNJp1xenZCQcxRrHLzMDpLxNkc9jZAi3pEVdyo6ADT9TtzdMMXZAGnBfdZCnGzZAixO4enBZAoYUzX8ikidhZCN36IEwi5TxASHQEGSj4gNDMMs1cheirBEdbP4lCZB8J1OjZAWX4qIvaAgIAjrD6gEZAMtBXbcpMShgV3VfL1Eq5wbRE";
 const PHONE_NUMBER_ID = "1071558242701625"; 
 const VERIFY_TOKEN = "WandaVerify123";
 
-const supabaseUrl = 'https://itfwpvjscosvofgocvpx.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZndwdmpzY29zdm9mZ29jdnB4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTk1OTI0MSwiZXhwIjoyMDU3NTM1MjQxfQ.mHn_YlA-0q_SAnq2Xw8667iJ00K2Kj81_rD-uM6Ym6s';
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient('https://itfwpvjscosvofgocvpx.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZndwdmpzY29zdm9mZ29jdnB4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTk1OTI0MSwiZXhwIjoyMDU3NTM1MjQxfQ.mHn_YlA-0q_SAnq2Xw8667iJ00K2Kj81_rD-uM6Ym6s');
 
 export default async function handler(req, res) {
-  // 1. Webhook Verification (GET)
   if (req.method === 'GET') {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      return res.status(200).send(challenge);
-    }
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) return res.status(200).send(challenge);
     return res.status(403).end();
   }
 
-  // 2. Message Handling (POST)
   if (req.method === 'POST') {
     try {
       const body = req.body;
       const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
       if (message?.type === 'text') {
-        const customerNumber = message.from; // This usually comes as "2376..."
-        const textContent = message.text.body;
-        const amount = parseFloat(textContent.replace(/[^0-9.]/g, ''));
+        const customerNumber = message.from;
+        const amount = parseFloat(message.text.body.replace(/[^0-9.]/g, ''));
 
         if (!isNaN(amount)) {
           const tax = amount * 0.05;
 
-          // Save to Supabase
-          await supabase.from('weekly_summaries').insert([
-            {
+          // 1. Supabase Record
+          await supabase.from('weekly_summaries').insert([{
               phone_number: customerNumber,
               turnover: amount,
               tax_amount: tax,
               business_id: "WandaTax"
-            }
-          ]);
+          }]);
 
-          // --- FIX: Ensure number has '+' prefix for Meta Sandbox Allowed List ---
-          const formattedRecipient = customerNumber.startsWith('+') ? customerNumber : `+${customerNumber}`;
-
-          // Reply via WhatsApp
-          const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
-          
-          const whatsappRequest = await fetch(url, {
+          // 2. WhatsApp Reply - Force Sandbox format
+          const response = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
@@ -60,26 +45,19 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
               messaging_product: "whatsapp",
-              recipient_type: "individual",
-              to: formattedRecipient,
+              to: customerNumber, // Sandbox often prefers no '+' here
               type: "text",
-              text: {
-                body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA\n\n_Data logged to Supabase._`
-              }
+              text: { body: `✅ *WandaTax Record*\nTurnover: ${amount.toLocaleString()} CFA\nTax: ${tax.toLocaleString()} CFA` }
             })
           });
 
-          const result = await whatsappRequest.json();
-          console.log("Final Meta Response:", JSON.stringify(result, null, 2));
+          const result = await response.json();
+          console.log("Log: Replying to", customerNumber, "Result:", JSON.stringify(result));
         }
       }
-      return res.status(200).send('EVENT_RECEIVED');
-    } catch (error) {
-      console.error("Critical Error:", error);
-      return res.status(200).send('EVENT_RECEIVED');
+      return res.status(200).send('OK');
+    } catch (e) {
+      return res.status(200).send('OK');
     }
   }
-
-  res.setHeader('Allow', ['GET', 'POST']);
-  res.status(405).end();
 }
