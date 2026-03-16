@@ -1,5 +1,10 @@
-// Replace the first part with your actual URL string
-const supabase = createClient('https://your-project-id.supabase.co', process.env.SUPABASE_SERVICE_ROLE_KEY);
+import { createClient } from '@supabase/supabase-js';
+
+// Hard-coded credentials to bypass Vercel environment variable issues
+const supabase = createClient(
+  'https://wgqoresowzvieztuxbzz.supabase.co', 
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndncW9yZXNvd3p2aWV6dHV4Ynp6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzI3MDQzNywiZXhwIjoyMDg4ODQ2NDM3fQ.-Kt8W5I63dDdN4qegQS99hRocljTy4IHozLMhPncpcE'
+);
 
 export default async function handler(req, res) {
   // 1. Handle Meta's Verification (The Handshake)
@@ -25,18 +30,20 @@ export default async function handler(req, res) {
         const senderPhone = message.from;
         const text = message.text.body;
 
-        // Extract numbers only (e.g., "35000" from "I made 35000")
+        // Extract numbers only
         const amount = parseFloat(text.replace(/[^0-9.]/g, ''));
 
         if (!isNaN(amount)) {
           const tax = amount * 0.05; // 5% Calculation
 
           // Save to Supabase
-          await supabase.from('weekly_summaries').insert([
+          const { error: dbError } = await supabase.from('weekly_summaries').insert([
             { total_turnover: amount, tax_due: tax, merchant_phone: senderPhone, raw_text: text }
           ]);
 
-          // Send WhatsApp Reply
+          if (dbError) throw new Error(`Supabase Error: ${dbError.message}`);
+
+          // Send WhatsApp Reply (Uses variables for Meta tokens)
           await fetch(`https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`, {
             method: 'POST',
             headers: {
