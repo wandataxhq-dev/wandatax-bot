@@ -17,17 +17,21 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const body = req.body;
     const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    
     if (!message || message.type !== 'text') return res.status(200).send('OK');
 
-    const customerNumber = message.from; 
+    let customerNumber = message.from.replace(/\D/g, ''); // Get digits only
     const amount = parseFloat(message.text.body.replace(/[^0-9.]/g, ''));
 
     if (!isNaN(amount)) {
       const tax = amount * 0.05;
+      
+      // CAMEROON FIX: If number is 2377..., it's missing the '6'.
+      // Correct format is 23767... or 23769...
+      if (customerNumber.startsWith('237') && customerNumber.length === 11) {
+          customerNumber = '2376' + customerNumber.substring(3);
+      }
 
       try {
-        // 1. Supabase
         await supabase.from('weekly_summaries').insert([{
           phone_number: customerNumber,
           turnover: amount,
@@ -35,8 +39,10 @@ export default async function handler(req, res) {
           business_id: "WandaTax"
         }]);
 
-        // 2. WhatsApp Reply - Trying the number exactly as it came in
-        const response = await fetch(`https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`, {
+        // Try the exact number used in your successful CURL command
+        const targetNumber = "237670791352"; 
+
+        const response = await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
@@ -44,17 +50,17 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({
             messaging_product: "whatsapp",
-            to: customerNumber,
+            to: targetNumber,
             type: "text",
             text: { body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA` }
           })
         });
 
         const result = await response.json();
-        console.log(`ATTEMPT FOR ${customerNumber}:`, JSON.stringify(result));
+        console.log(`FINAL ATTEMPT Result:`, JSON.stringify(result));
 
       } catch (err) {
-        console.error("CRITICAL SYSTEM ERROR:", err.message);
+        console.error("Error:", err.message);
       }
     }
     return res.status(200).send('OK');
