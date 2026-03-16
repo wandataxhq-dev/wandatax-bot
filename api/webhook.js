@@ -16,53 +16,84 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = req.body;
-    const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-    if (!message || message.type !== 'text') return res.status(200).send('OK');
+    const entry = body.entry?.[0]?.changes?.[0]?.value;
+    const message = entry?.messages?.[0];
+    if (!message) return res.status(200).send('OK');
 
-    let customerNumber = message.from.replace(/\D/g, ''); // Get digits only
-    const amount = parseFloat(message.text.body.replace(/[^0-9.]/g, ''));
+    const customerNumber = message.from;
 
-    if (!isNaN(amount)) {
-      const tax = amount * 0.05;
-      
-      // CAMEROON FIX: If number is 2377..., it's missing the '6'.
-      // Correct format is 23767... or 23769...
-      if (customerNumber.startsWith('237') && customerNumber.length === 11) {
-          customerNumber = '2376' + customerNumber.substring(3);
+    // --- CASE 1: USER TYPES 'PDF' ---
+    if (message.type === 'text' && message.text.body.toLowerCase().trim() === 'pdf') {
+      const pdfLink = `https://wandatax-bot.vercel.app/api/generate-pdf?phone=${customerNumber}`;
+      await sendMsg(customerNumber, `📄 *WandaTax Official Statement*\n\nClick below to download your business report for this month. Use this for bank loans or tax records:\n\n${pdfLink}`);
+      return res.status(200).send('OK');
+    }
+
+    // --- CASE 2: USER TYPES AN AMOUNT ---
+    if (message.type === 'text') {
+      let text = message.text.body.toLowerCase();
+      if (text.includes('k')) text = text.replace(/(\d+)k/g, (m, p1) => p1 + "000");
+      const amount = parseFloat(text.replace(/[^0-9]/g, ''));
+
+      if (!isNaN(amount) && amount > 0) {
+        await sendCategoryList(customerNumber, amount);
       }
+    }
+
+    // --- CASE 3: USER SELECTS CATEGORY ---
+    if (message.type === 'interactive' && message.interactive.type === 'list_reply') {
+      const responseId = message.interactive.list_reply.id;
+      const [ , category, amountStr] = responseId.split('_');
+      const amount = parseFloat(amountStr);
+      const tax = amount * 0.05;
 
       try {
         await supabase.from('weekly_summaries').insert([{
           phone_number: customerNumber,
           turnover: amount,
           tax_amount: tax,
+          category: category,
           business_id: "WandaTax"
         }]);
 
-        // Try the exact number used in your successful CURL command
-        const targetNumber = "237670791352"; 
-
-        const response = await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: targetNumber,
-            type: "text",
-            text: { body: `✅ *WandaTax Record*\n\nTurnover: ${amount.toLocaleString()} CFA\nTax (5%): ${tax.toLocaleString()} CFA` }
-          })
-        });
-
-        const result = await response.json();
-        console.log(`FINAL ATTEMPT Result:`, JSON.stringify(result));
-
-      } catch (err) {
-        console.error("Error:", err.message);
-      }
+        await sendMsg(customerNumber, `✅ *Record Saved!*\nAmount: ${amount.toLocaleString()} CFA\nCategory: ${category}\n\n_Type "PDF" anytime to download your full statement._`);
+      } catch (err) { console.error(err); }
     }
+
     return res.status(200).send('OK');
   }
+}
+
+// --- HELPER FUNCTIONS ---
+async function sendMsg(to, text) {
+  await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body: text } })
+  });
+}
+
+async function sendCategoryList(to, amount) {
+  await fetch(`https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${ACCESS_TOKEN.trim()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        header: { type: "text", text: "Category Selection" },
+        body: { text: `Select the category for ${amount.toLocaleString()} CFA:` },
+        action: {
+          button: "Select Category",
+          sections: [
+            { title: "Retail", rows: [{id:`cat_Provision_${amount}`, title:"Boutique"}, {id:`cat_Clothing_${amount}`, title:"Clothing"}] },
+            { title: "Food", rows: [{id:`cat_Resto_${amount}`, title:"Restaurant"}, {id:`cat_Bar_${amount}`, title:"Snack-Bar"}] },
+            { title: "Services", rows: [{id:`cat_Momo_${amount}`, title:"MoMo/Call Box"}, {id:`cat_Other_${amount}`, title:"Other"}] }
+          ]
+        }
+      }
+    })
+  });
 }
