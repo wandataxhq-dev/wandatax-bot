@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-// --- DIRECT HARD-CODED CREDENTIALS ---
-const ACCESS_TOKEN = "EAAY9ZCQ1jP9oBOZBZB0ZA0YQvVshG2DAnN8pE58ZBS7ZB7zE6LqB2U9xKZA6O6S37ZAz3pQ3ZC4XvN17904ZBZCQ5MZA4M9A7ZAZC0ZB5yQzZB497nZA1M3VZC7ZA8DpxW6qRkY0Y6ZAfh4tMhG87ZCPD0S0lE9yZA7O8Hic7ZAy5H3fZA8V29ZCZB0uY907PzDREH5UvAizN2PZBZCAZD";
+// --- CLEANED CREDENTIALS ---
+const ACCESS_TOKEN = "EAAYkJd8MRZBMBQ3Bs3XStEZBgS0sJ8IDztIRp0xGyXcdOZBNihkJRNEdUe6CNoq7A3RxyFBWcJeF2z3xx6ZBqiBIco7kzCetf4EQ7w5S8wqTpaoxdjGhlxR6AgVYVJudTZBMz1ZBqdTJr77a0gFGI9nbh0NGHIfJAKpRSxEactZBQ9BZA6AOukt5LvQNPEl5EZCkQWmaFCcFE0ZAN8ZAQuA79ZB5a47ZAzVZAelnp2EEM1HXvn0brh8zpj5Xjd4Vw03f5qVo8Fpm4YZBGMHes8eGN45RuZBSsJeYQJYZD";
 const PHONE_NUMBER_ID = "567083076495287";
 const VERIFY_TOKEN = "WandaVerify123";
 
-// Your verified Supabase credentials
+// Supabase credentials
 const supabaseUrl = 'https://itfwpvjscosvofgocvpx.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0ZndwdmpzY29zdm9mZ29jdnB4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MTk1OTI0MSwiZXhwIjoyMDU3NTM1MjQxfQ.mHn_YlA-0q_SAnq2Xw8667iJ00K2Kj81_rD-uM6Ym6s';
 
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
         const businessNumber = body.entry[0].changes[0].value.metadata.display_phone_number;
         const customerNumber = message.from;
         const text = message.text.body;
-        const amount = parseFloat(text);
+        const amount = parseFloat(text.replace(/[^0-9.]/g, '')); // Clean text to get only numbers
 
         if (!isNaN(amount)) {
           const tax = amount * 0.05;
@@ -68,13 +68,13 @@ export default async function handler(req, res) {
           );
 
           const result = await response.json();
-          console.log("WhatsApp API Response:", result);
+          console.log("WhatsApp API Response:", JSON.stringify(result, null, 2));
         }
       }
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
       console.error("Internal Error:", error);
-      return res.status(200).json({ status: 'ok' }); // Always return 200 to Meta
+      return res.status(200).json({ status: 'ok' });
     }
   }
 
